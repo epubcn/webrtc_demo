@@ -78,15 +78,15 @@ public class MainActivity extends AppCompatActivity {
     private boolean mStartCapture;
 
     //for video frame dump
-    private boolean bDumpVideoFrameToFile = false;  // set to true to save video frame to FRAME_SAVE_PATH
+    private boolean bDumpVideoFrameToFile = true;  // set to true to save video frame to FRAME_SAVE_PATH
     private int mDumpFrameCount;
     private static final int MAX_DUMP_FRAME_COUNT = 100;
-    private static final String FRAME_SAVE_PATH = "/sdcard/bjy_save/";
-    private static final String FRAME_SAVE_SUFFIX = ".yuv";
+    private File mYuvFile;
+    private FileOutputStream mOutputStream;
 
     //capture parameters
-    private static final int CAPTURE_WIDTH = 1280;
-    private static final int CAPTURE_HEIGHT = 720;
+    private static final int CAPTURE_WIDTH = 640;
+    private static final int CAPTURE_HEIGHT = 480;
     private static final int CAPTURE_FPS = 15;
 
     //org.webrtc objects
@@ -130,6 +130,20 @@ public class MainActivity extends AppCompatActivity {
         final int chromaWidth = (width + 1) / 2;
         final int chromaHeight = (height + 1) / 2;
 
+        if(mYuvFile == null) {
+            mYuvFile = new File("/sdcard/bjy_yuv420p_"+width+"x"+height+".yuv");
+
+            try {
+                if(mOutputStream != null) {
+                    mOutputStream.close();
+                    mOutputStream = null;
+                }
+                mOutputStream = new FileOutputStream(mYuvFile);
+            }catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
         // Test org.webrtc.YuvHelper convert functions
 //        final int minSize = width * height + chromaWidth * chromaHeight * 2;
 //        ByteBuffer yuvBuffer = ByteBuffer.allocateDirect(minSize);
@@ -147,8 +161,7 @@ public class MainActivity extends AppCompatActivity {
 //        );
         videoFrame.release();
 
-        File file = new File(FRAME_SAVE_PATH + "bjy_videoframe_dump" + mDumpFrameCount + FRAME_SAVE_SUFFIX);
-        try (FileOutputStream outputStream = new FileOutputStream(file)) {
+        try {
 //            yuvImage.compressToJpeg(
 //                    new Rect(0, 0, width, height),
 //                    100,
@@ -158,28 +171,26 @@ public class MainActivity extends AppCompatActivity {
 //            outputStream.write(yuvBuffer.array());
 
             //write Y data
-            outputStream.write(yData);
+            mOutputStream.write(yData);
 
             int offset = 0;
             int h;
 
             //write U data
             for(h = 0; h < chromaHeight; h++) {
-                outputStream.write(uData, offset, chromaWidth);
+                mOutputStream.write(uData, offset, chromaWidth);
                 offset += i420Buffer.getStrideU();
             }
 
             //write V data
             offset = 0;
             for(h = 0; h < chromaHeight; h++) {
-                outputStream.write(vData, offset, chromaWidth);
+                mOutputStream.write(vData, offset, chromaWidth);
                 offset += i420Buffer.getStrideV();
             }
 
-            outputStream.flush();
-            outputStream.close();
+            mOutputStream.flush();
 
-            Log.d(TAG, "write "+mDumpFrameCount+" frame to file");
 
         } catch (IOException io) {
             io.printStackTrace();
@@ -188,7 +199,7 @@ public class MainActivity extends AppCompatActivity {
 
     private class ProxyVideoSink implements VideoSink {
 
-        private boolean bUseVisonular = true;
+        private boolean bUseVisonular = false;
         private SurfaceViewRenderer mSurfaceRenderer;
         private VsdnnRenderView mVsdnnRenderView;
 
@@ -444,6 +455,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void close() {
+        try {
+            if(mOutputStream != null) {
+                mOutputStream.flush();
+                mOutputStream.close();
+            }
+        }catch (IOException e) {
+            e.printStackTrace();
+        }
+
         executor.execute(this ::closeInternal);
     }
 
